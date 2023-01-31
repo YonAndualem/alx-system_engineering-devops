@@ -1,61 +1,58 @@
 #!/usr/bin/python3
-""" Count it! """
-from requests import get
+"""100-count
+"""
+import json
+from operator import itemgetter
 
-REDDIT = "https://www.reddit.com/"
-HEADERS = {'user-agent': 'my-app/0.0.1'}
+import requests
+
+BASE_URL = "https://www.reddit.com/r"
+HEADERS = {"User-Agent": "ALX-Bot"}
 
 
-def count_words(subreddit, word_list, after="", word_dic={}):
+def count_words(subreddit, word_list, after=None, counter=None):
+    """recursively calls the reddit api to get list hot posts and count the
+    given keyword in their title
+
+    Args:
+        subreddit (str): title of the subreddit
+        word_list (list): list of key words
+        after (str, optional): id of the hot posts list. Defaults to None.
+        counter (list, optional): KeyWord list counter. Defaults to None.
     """
-    Returns a list containing the titles of all hot articles for a
-    given subreddit. If no results are found for the given subreddit,
-    the function should return None.
-    """
-    if not word_dic:
+    if len(word_list) == 0:
+        return
+
+    if counter is None:
+        counter = {}
         for word in word_list:
-            word_dic[word] = 0
+            if word.lower() not in counter:
+                counter[word.lower()] = 0
 
-    if after is None:
-        word_list = [[key, value] for key, value in word_dic.items()]
-        word_list = sorted(word_list, key=lambda x: (-x[1], x[0]))
-        for w in word_list:
-            if w[1]:
-                print("{}: {}".format(w[0].lower(), w[1]))
-        return None
+    query = "" if after is None else "&after={}".format(after)
+    result = requests.get(
+        "{}/{}/hot.json?limit=100{}".format(BASE_URL, subreddit, query),
+        headers=HEADERS,
+        allow_redirects=False,
+    )
 
-    url = REDDIT + "r/{}/hot/.json".format(subreddit)
+    if result.status_code == 200:
+        data = json.loads(result.text)["data"]
 
-    params = {
-        'limit': 100,
-        'after': after
-    }
+        for post in data["children"]:
+            title = post.get('data').get("title").lower().split()
+            for word in word_list:
+                counter[word.lower()] += sum(w == word.lower() for w in title)
 
-    r = get(url, headers=HEADERS, params=params, allow_redirects=False)
-
-    if r.status_code != 200:
-        return None
-
-    try:
-        js = r.json()
-
-    except ValueError:
-        return None
-
-    try:
-
-        data = js.get("data")
-        after = data.get("after")
-        children = data.get("children")
-        for child in children:
-            post = child.get("data")
-            title = post.get("title")
-            lower = [s.lower() for s in title.split(' ')]
-
-            for w in word_list:
-                word_dic[w] += lower.count(w.lower())
-
-    except:
-        return None
-
-    count_words(subreddit, word_list, after, word_dic)
+        after = data["after"]
+        if after is None:
+            counter = sorted(
+                sorted(counter.items()),
+                key=itemgetter(1),
+                reverse=True,
+            )
+            for word in counter:
+                if word[1] > 0:
+                    print("{}: {}".format(word[0], word[1]))
+        else:
+            count_words(subreddit, word_list, after, counter)
